@@ -16,17 +16,16 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     `rm .vagrant/machines/#{@machine.name}/virtualbox/synced_folders`
   end
 
-  config.vm.synced_folder "/usr/local/bin/kubectl", "/usr/local/bin/kubectl", id: "vagrant"
-  config.vm.synced_folder "./mysql-replication", "/home/vagrant/mysql-replication", id: "vagrant"
-
   # Kubernetes Master
   config.vm.define 'kubernetes-master' do |master|
     master.vm.hostname = 'kebernetes-master'
     master.vm.network :private_network, ip: '35.35.35.30'
-    master.vm.network :forwarded_port, guest: 8080, host: 8080
+    
+    master.vm.network :forwarded_port, guest: 80, host: 8080
+    master.vm.network :forwarded_port, guest: 443, host: 8443
+    master.vm.network :forwarded_port, guest: 8001, host: 8001
 
-    master.vm.provision :shell,
-      inline: "sudo apt-get update && sudo apt-get install -y mysql-server"
+    master.vm.synced_folder "./kubernetes-ui-docker", "/opt/kubernetes-ui-docker", id: "vagrant"
     
     master.vm.provision :docker do |docker|
       # etcd
@@ -68,10 +67,22 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
              args: "--net=host",
              cmd: "/hyperkube controller-manager --master=127.0.0.1:8080 --v=2",
              daemonize: true
+      
+      # Kubernetes UI
+      docker.build_image "/opt/kubernetes-ui-docker",
+             args: "-t kubernetes-ui"
+       
+      docker.run "kubernetes-ui",
+             image: "kubernetes-ui",
+             args: "-t -p 8001",
+             daemonize: true
+
     end
 
-    master.vm.provision :shell,
-      inline: "kubectl -s 127.0.0.1:8080 create -f /home/vagrant/mysql-replication/mysql-master.yaml"
+    #master.vm.provision :shell,
+    #  inline: "kubectl -s 127.0.0.1:8080 create -f /home/vagrant/mysql-replication/mysql-master.yaml"
+    #minion.vm.provision :shell,
+    #  inline: "kubectl -s 127.0.0.1:8080 create -f /home/vagrant/mysql-replication/mysql-slave.yaml"
 
   end
 
@@ -79,8 +90,8 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     minion.vm.hostname = 'kubernetes-minion-1'
     minion.vm.network :private_network, ip: '35.35.35.31'
 
-    master.vm.provision :shell,
-      inline: "sudo apt-get update && sudo apt-get install -y mysql-server"
+    #minion.vm.provision :shell,
+    #  inline: "sudo apt-get update && sudo apt-get install -y mysql-server"
 
     minion.vm.provision :docker do |docker|
       # flannel
@@ -103,9 +114,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
              cmd: "/hyperkube proxy --master=http://35.35.35.30:8080 --v=2",
              daemonize: true
     end
-
-    master.vm.provision :shell,
-      inline: "kubectl -s 127.0.0.1:8080 create -f /home/vagrant/mysql-replication/mysql-slave.yaml"
 
   end
 end
