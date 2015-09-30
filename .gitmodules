@@ -1,6 +1,3 @@
-[submodule "kubernetes-ui-docker/kube-ui-docker"]
-	path = kubernetes-ui-docker/kube-ui-docker
-	url = git@github.com:gueux/kube-ui-docker.git
-[submodule "kubernetes-ui-docker/kube-ui"]
-	path = kubernetes-ui-docker/kube-ui
-	url = git@github.com:gueux/kube-ui.git
+[submodule "kubernetes"]
+	path = kubernetes
+	url = git@github.com:kubernetes/kubernetes.git
