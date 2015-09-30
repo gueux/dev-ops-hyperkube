@@ -1,0 +1,32 @@
+etcd:  
+  image: gcr.io/google_containers/etcd:2.0.9
+  net: host
+  command: ["/usr/local/bin/etcd", "--bind-addr=0.0.0.0:4001", "--data-dir=/var/etcd/data"]
+
+apiserver:  
+  image: gcr.io/google_containers/hyperkube:v0.21.2
+  net: host
+  command: ["/hyperkube", "apiserver", "--allow-privileged=true", "--insecure-bind-address=0.0.0.0", "--v=2", "--service-cluster-ip-range=10.0.0.0/24", "--etcd-servers=http://127.0.0.1:4001", "--cors_allowed_origins="http://localhost:8001""]
+
+proxy:  
+  image: gcr.io/google_containers/hyperkube:v0.21.2
+  net: host
+  command: ["/hyperkube", "proxy", "--master=http://127.0.0.1:8080", "--v=2"]
+  privileged: true
+
+kubelet:  
+  image: gcr.io/google_containers/hyperkube:v0.21.2
+  net: host
+  command: ["/hyperkube", "kubelet", "--allow-privileged=true", "--api_servers=http://127.0.0.1:8080", "--v=2", "--address=0.0.0.0", "--enable_server"]
+  volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+
+controller:  
+  image: gcr.io/google_containers/hyperkube:v0.21.2
+  net: host
+  command: ["/hyperkube", "controller-manager", "--master=127.0.0.1:8080", "--v=2"]
+
+scheduler:  
+  image: gcr.io/google_containers/hyperkube:v0.21.2
+  net: host
+  command: ["/hyperkube", "scheduler", "--master=127.0.0.1:8080", "--v=2"]

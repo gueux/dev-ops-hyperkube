@@ -1,0 +1,17 @@
+flanneld:  
+  image: yungsang/flannel
+  net: host
+  command: ["/go/bin/flanneld", "-etcd-endpoint='http://{MASTER_IP}:4001'"]
+
+proxy:  
+  image: gcr.io/google_containers/hyperkube:v0.21.2
+  net: host
+  command: ["/hyperkube", "proxy", "--master=http://{MASTER_IP}:8080", "--v=2"]
+  privileged: true
+
+kubelet:  
+  image: gcr.io/google_containers/hyperkube:v0.21.2
+  net: host
+  command: ["/hyperkube", "kubelet", "--allow-privileged=true", "--api_servers=http://{MASTER_IP}:8080", "--v=2", "--address=0.0.0.0", "--enable_server"]
+  volumes:
+    - /var/run/docker.sock:/var/run/docker.sock

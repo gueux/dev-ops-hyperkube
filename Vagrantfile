@@ -2,6 +2,7 @@
 # vi: set ft=ruby :
 
 VAGRANTFILE_API_VERSION = "2"
+NUMBER_OF_MINIONS=1
 
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.env.enable
@@ -22,21 +23,16 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     master.vm.network :private_network, ip: '35.35.35.30'
     
     master.vm.network :forwarded_port, guest: 8080, host: 8080
-    master.vm.network :forwarded_port, guest: 443, host: 8443
-    master.vm.network :forwarded_port, guest: 8001, host: 8001
 
-    master.vm.synced_folder "./kubernetes-ui-docker", "/opt/kubernetes-ui-docker", id: "vagrant"
+    master.vm.synced_folder "../dev-ops-hyperkube", "/opt/dev_ops_hyperkube", id: "vagrant"
     
     master.vm.provision :docker do |docker|
 
       # Pull images firstly
       docker.pull_images "gcr.io/google_containers/etcd:2.0.9"
       docker.pull_images "gcr.io/google_containers/hyperkube:v0.21.2"
+      docker.pull_images "gcr.io/google_containers/kube-ui:v1.1"
       
-      # Build image for kubernetes-ui
-      # docker.build_image "/opt/kubernetes-ui-docker/",
-      #        args: "-t randrmusic/kubernetes-ui"
-
       # Run containers with: 
       # etcd
       docker.run "etcd",
@@ -74,50 +70,55 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
              args: "--net=host",
              cmd: "/hyperkube controller-manager --master=127.0.0.1:8080 --v=2",
              daemonize: true
-      # Kubernetes UI 
-      # docker.run "kubernetes-ui",
-      #        image: "randrmusic/kubernetes-ui",
-      #        args: "-p 8001:8001 -e ENV_K8S_API_SERVER='http://127.0.0.1:8080/api/v1'",
-      #        daemonize: true
 
+      # Kubernetes-UI
+      docker.run "kube-ui",
+             image: "gcr.io/google_containers/kube-ui:v1.1",
+             daemonize: true
     end
-
-    #master.vm.provision :shell,
-    #  inline: "kubectl -s 127.0.0.1:8080 create -f /home/vagrant/mysql-replication/mysql-master.yaml"
-    #minion.vm.provision :shell,
-    #  inline: "kubectl -s 127.0.0.1:8080 create -f /home/vagrant/mysql-replication/mysql-slave.yaml"
+    
+    # Install kubectl
+    master.vm.provision :shell,
+      inline: "cd /opt/dev_ops_hyperkube && sudo make kubectl"
 
   end
 
-  # Kubernetes Minion
-  config.vm.define 'kubernetes-minion-1' do |minion|
-    minion.vm.hostname = 'kubernetes-minion-1'
-    minion.vm.network :private_network, ip: '35.35.35.31'
+  # Kubernetes Minions
+  NUMBER_OF_MINIONS.times do |i|
 
-    #minion.vm.provision :shell,
-    #  inline: "sudo apt-get update && sudo apt-get install -y mysql-server"
+    MINION_NAME = "kubernetes-minion-#{i+1}"
+    MINION_IP = "35.35.35.3#{i+1}"
 
-    minion.vm.provision :docker do |docker|
-      # flannel
-      docker.pull_images "yungsang/flannel"
-      docker.run "flannel",
-             image: "yungsang/flannel",
-             args: "--net=host",
-             cmd: "/go/bin/flanneld -etcd-endpoint='http://35.35.35.30:4001'",
-             daemonize: true
-      # Kubelet
-      docker.run "kubelet",
-             image: "gcr.io/google_containers/hyperkube:v0.21.2",
-             args: " --net=host --volume /var/run/docker.sock:/var/run/docker.sock",
-             cmd: "/hyperkube kubelet --api_servers=http://35.35.35.30:8080 --v=2 --address=0.0.0.0 --hostname_override=35.35.35.31",
-             daemonize: true
-      # Proxy 
-      docker.run "proxy", 
-             image: "gcr.io/google_containers/hyperkube:v0.21.2",
-             args: "--net=host --privileged",
-             cmd: "/hyperkube proxy --master=http://35.35.35.30:8080 --v=2",
-             daemonize: true
+    config.vm.define MINION_NAME do |minion|
+      minion.vm.hostname = MINION_NAME
+      minion.vm.network :private_network, ip: MINION_IP
+
+      minion.vm.provision :docker do |docker|
+        
+        # Pull images
+        docker.pull_images "yungsang/flannel"
+        docker.pull_images "gcr.io/google_containers/hyperkube:v0.21.2"
+
+        # flannel
+        docker.run "flannel",
+               image: "yungsang/flannel",
+               args: "--net=host",
+               cmd: "/go/bin/flanneld -etcd-endpoint='http://35.35.35.30:4001'",
+               daemonize: true
+        # Kubelet
+        docker.run "kubelet",
+               image: "gcr.io/google_containers/hyperkube:v0.21.2",
+               args: " --net=host --volume /var/run/docker.sock:/var/run/docker.sock",
+               cmd: "/hyperkube kubelet --api_servers=http://35.35.35.30:8080 --v=2 --address=0.0.0.0 --hostname_override=35.35.35.31",
+               daemonize: true
+        # Proxy 
+        docker.run "proxy", 
+               image: "gcr.io/google_containers/hyperkube:v0.21.2",
+               args: "--net=host --privileged",
+               cmd: "/hyperkube proxy --master=http://35.35.35.30:8080 --v=2",
+               daemonize: true
+      end
     end
-
   end
+
 end
