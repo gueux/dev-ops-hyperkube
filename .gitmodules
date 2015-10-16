@@ -1,0 +1,3 @@
+[submodule "kubectl-scenarios/fabric8/templates"]
+	path = kubectl-scenarios/fabric8/templates
+	url = https://github.com/fabric8io/templates.git
