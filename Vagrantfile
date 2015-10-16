@@ -2,7 +2,7 @@
 # vi: set ft=ruby :
 
 VAGRANTFILE_API_VERSION = "2"
-NUMBER_OF_MINIONS=1
+NUMBER_OF_MINIONS=2
 
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.env.enable
@@ -17,15 +17,16 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     `rm .vagrant/machines/#{@machine.name}/virtualbox/synced_folders`
   end
 
+  config.vm.synced_folder "../dev-ops-hyperkube", "/opt/dev_ops_hyperkube", id: "vagrant"
+
   # Kubernetes Master
   config.vm.define 'kubernetes-master' do |master|
     master.vm.hostname = 'kebernetes-master'
     master.vm.network :private_network, ip: '35.35.35.30'
     
     master.vm.network :forwarded_port, guest: 8080, host: 8080
+    master.vm.network :forwarded_port, guest: 3001, host: 3001
 
-    master.vm.synced_folder "../dev-ops-hyperkube", "/opt/dev_ops_hyperkube", id: "vagrant"
-    
     master.vm.provision :docker do |docker|
 
       # Pull images firstly
@@ -44,19 +45,13 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       docker.run "apiserver",
              image: "gcr.io/google_containers/hyperkube:v0.21.2",
              args: "--net=host -v /var/run/docker.sock:/var/run/docker.sock ",
-             cmd: "/hyperkube apiserver --allow-privileged=true --insecure-bind-address=0.0.0.0 --v=2 --service-cluster-ip-range=10.0.0.0/24 --etcd-servers=http://127.0.0.1:4001 --cors_allowed_origins='http://localhost:8001'",
+             cmd: "/hyperkube apiserver --allow-privileged=true --insecure-bind-address=0.0.0.0 --v=2 --service-cluster-ip-range=10.100.0.0/16 --etcd-servers=http://127.0.0.1:4001 --cors_allowed_origins=.*",
              daemonize: true
       # Proxy 
       docker.run "proxy", 
              image: "gcr.io/google_containers/hyperkube:v0.21.2",
              args: "--net=host --privileged",
              cmd: "/hyperkube proxy --master=http://127.0.0.1:8080 --v=2",
-             daemonize: true
-      # Kubelet
-      docker.run "kubelet",
-             image: "gcr.io/google_containers/hyperkube:v0.21.2",
-             args: "--net=host --volume /var/run/docker.sock:/var/run/docker.sock",
-             cmd: "/hyperkube kubelet --api_servers=http://localhost:8080 --v=2 --allow-privileged=true --address=0.0.0.0 --hostname_override=35.35.35.30 --enable-server",
              daemonize: true
       # Scheduler
       docker.run "scheduler",
@@ -70,46 +65,54 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
              args: "--net=host",
              cmd: "/hyperkube controller-manager --master=127.0.0.1:8080 --v=2",
              daemonize: true
-
       # Kubernetes-UI
       docker.run "kube-ui",
              image: "gcr.io/google_containers/kube-ui:v1.1",
              daemonize: true
     end
     
-    # Install kubectl
+    # Install kubectl & etcdctl & provide flannel network keys
     master.vm.provision :shell,
-      inline: "cd /opt/dev_ops_hyperkube && sudo make kubectl"
-
+      inline: "cd /opt/dev_ops_hyperkube && sudo make kubectl && sudo make etcdctl && make etcd-network"
+    # Install flanneld  
+    master.vm.provision :shell, 
+        privileged: true,
+        inline: "cp /opt/dev_ops_hyperkube/etc/default.flanneld /etc/default/flanneld && \
+                 cp /opt/dev_ops_hyperkube/etc/init.flanneld.conf /etc/init/flanneld.conf && \
+                 cp /opt/dev_ops_hyperkube/bin/flanneld /usr/local/sbin/flanneld && service flanneld start"
   end
 
   # Kubernetes Minions
   NUMBER_OF_MINIONS.times do |i|
 
-    MINION_NAME = "kubernetes-minion-#{i+1}"
-    MINION_IP = "35.35.35.3#{i+1}"
+    minion_name = "kubernetes-minion-#{i+1}"
+    minion_ip = "35.35.35.3#{i+1}"
 
-    config.vm.define MINION_NAME do |minion|
-      minion.vm.hostname = MINION_NAME
-      minion.vm.network :private_network, ip: MINION_IP
+    config.vm.define "#{minion_name}" do |minion|
+
+      minion.vm.hostname = "#{minion_name}"
+      minion.vm.network :private_network, ip: "#{minion_ip}"
+
+      minion.vm.provision :shell, 
+        privileged: true,
+        inline: "cp /opt/dev_ops_hyperkube/etc/default.flanneld /etc/default/flanneld && \
+                 cp /opt/dev_ops_hyperkube/etc/init.flanneld.conf /etc/init/flanneld.conf && \
+                 cp /opt/dev_ops_hyperkube/bin/flanneld /usr/local/sbin/flanneld && start flanneld"
+
+      minion.vm.provision :shell, 
+        privileged: true,
+        inline: "cp /opt/dev_ops_hyperkube/etc/default.docker /etc/default/docker"
 
       minion.vm.provision :docker do |docker|
         
         # Pull images
-        docker.pull_images "yungsang/flannel"
         docker.pull_images "gcr.io/google_containers/hyperkube:v0.21.2"
 
-        # flannel
-        docker.run "flannel",
-               image: "yungsang/flannel",
-               args: "--net=host",
-               cmd: "/go/bin/flanneld -etcd-endpoint='http://35.35.35.30:4001'",
-               daemonize: true
         # Kubelet
         docker.run "kubelet",
                image: "gcr.io/google_containers/hyperkube:v0.21.2",
                args: " --net=host --volume /var/run/docker.sock:/var/run/docker.sock",
-               cmd: "/hyperkube kubelet --api_servers=http://35.35.35.30:8080 --v=2 --address=0.0.0.0 --hostname_override=35.35.35.31",
+               cmd: "/hyperkube kubelet --api_servers=http://35.35.35.30:8080 --v=2 --address=0.0.0.0",
                daemonize: true
         # Proxy 
         docker.run "proxy", 

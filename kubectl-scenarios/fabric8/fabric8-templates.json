@@ -1,0 +1,112 @@
+{
+    "apiVersion": "v1",
+    "items": [
+        {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "metadata": {
+                "annotations": {},
+                "labels": {
+                    "component": "fabric8-templates",
+                    "provider": "fabric8"
+                },
+                "name": "templates"
+            },
+            "spec": {
+                "deprecatedPublicIPs": [],
+                "ports": [
+                    {
+                        "port": 80,
+                        "protocol": "TCP",
+                        "targetPort": 8080
+                    }
+                ],
+                "selector": {
+                    "component": "fabric8-templates",
+                    "provider": "fabric8"
+                }
+            }
+        },
+        {
+            "apiVersion": "v1",
+            "kind": "ReplicationController",
+            "metadata": {
+                "annotations": {},
+                "labels": {
+                    "component": "fabric8-templates",
+                    "provider": "fabric8"
+                },
+                "name": "templates"
+            },
+            "spec": {
+                "replicas": 1,
+                "selector": {
+                    "component": "fabric8-templates",
+                    "provider": "fabric8"
+                },
+                "template": {
+                    "metadata": {
+                        "annotations": {},
+                        "labels": {
+                            "component": "fabric8-templates",
+                            "provider": "fabric8"
+                        }
+                    },
+                    "spec": {
+                        "containers": [
+                            {
+                                "args": [],
+                                "command": [],
+                                "env": [
+                                    {
+                                        "name": "DATA_DIR",
+                                        "value": "/data/templates"
+                                    },
+                                    {
+                                        "name": "KUBERNETES_NAMESPACE",
+                                        "valueFrom": {
+                                            "fieldRef": {
+                                                "fieldPath": "metadata.namespace"
+                                            }
+                                        }
+                                    }
+                                ],
+                                "image": "docker.io/fabric8/templates:2.2.19",
+                                "name": "templates",
+                                "ports": [
+                                    {
+                                        "containerPort": 8080,
+                                        "name": "http"
+                                    },
+                                    {
+                                        "containerPort": 8778,
+                                        "name": "jolokia"
+                                    }
+                                ],
+                                "securityContext": {},
+                                "volumeMounts": [
+                                    {
+                                        "mountPath": "/data",
+                                        "name": "template-data",
+                                        "readOnly": false
+                                    }
+                                ]
+                            }
+                        ],
+                        "imagePullSecrets": [],
+                        "nodeSelector": {},
+                        "volumes": [
+                            {
+                                "hostPath": {
+                                    "path": "/opt/dev_ops_hyperkube/kubectl-scenarios/fabric8/templates"
+                                },
+                                "name": "template-data"
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    ],
+    "kind": "List"
+}

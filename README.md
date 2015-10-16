@@ -1,2 +1,2 @@
 # docker-hyperkube
-Start up the kubernetes hyperkube master with one minion
+Start up the kubernetes hyperkube in Vagrant
